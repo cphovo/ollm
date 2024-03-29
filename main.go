@@ -54,8 +54,15 @@ func init() {
 		slog.Info("DEFAULT_COOKIES set, cookies.json will be ignored")
 	}
 
+	refreshToken := os.Getenv("KIMI_REFRESH_TOKEN")
+	if refreshToken == "" {
+		// refreshToken = "eyJhbGciOiJIUzUxM"
+		panic("在这里提供你默认的 refreshToken")
+	}
+
 	handler.Proxy = proxy
 	handler.DefaultCookies = defaultCookies
+	handler.DefaultRefreshToken = refreshToken
 
 	authToken = os.Getenv("AUTH_TOKEN")
 }
@@ -68,11 +75,17 @@ func main() {
 
 	r.GET("/", RootHandler)
 
+	// BING AI
 	r.POST("/image/upload", handler.BingImageUploadHandler)
 	r.POST("/image/create", handler.BingImageCreateHandler)
 	r.POST("/chat/stream", handler.BingStreamChatHandler)
+	// TODO 合并路由，通过模型区分
 	r.POST("/v1/chat/completions", handler.BingCompleteChatHandler)
 	r.POST("/v1/images/generations", handler.BingGenerateImageHandler)
+
+	// KIMI AI
+	r.POST("/kimi/chat/stream", handler.KimiStreamChatHandler)
+	r.POST("/v1/kimi/chat/completions", handler.KimiCompleteChatHandler)
 
 	r.Run(fmt.Sprintf(":%s", port))
 }
