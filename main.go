@@ -1,17 +1,13 @@
 package main
 
 import (
-	"context"
-	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
 	"mime/multipart"
 	"net/http"
 	"os"
-	"strings"
 
-	"github.com/cphovo/ollm/sydney"
+	"github.com/cphovo/ollm/handler"
 	"github.com/cphovo/ollm/util"
 	"github.com/gin-gonic/gin"
 )
@@ -22,11 +18,11 @@ type ImageUploadRequest struct {
 }
 
 var (
-	port           string
-	proxy          string
+	port string
+	// proxy          string
 	allowedOrigins string
-	defaultCookies map[string]string
-	authToken      string
+	// defaultCookies map[string]string
+	authToken string
 )
 
 func init() {
@@ -36,7 +32,7 @@ func init() {
 		port = "8080"
 	}
 
-	proxy = os.Getenv("HTTPS_PROXY")
+	proxy := os.Getenv("HTTPS_PROXY")
 	if proxy == "" {
 		proxy = os.Getenv("HTTP_PROXY")
 	}
@@ -46,7 +42,7 @@ func init() {
 		allowedOrigins = "*"
 	}
 
-	defaultCookies = util.ParseCookies(os.Getenv("DEFAULT_COOKIES"))
+	defaultCookies := util.ParseCookies(os.Getenv("DEFAULT_COOKIES"))
 
 	if len(defaultCookies) == 0 {
 		slog.Info("DEFAULT_COOKIES not set, reading from cookies.json")
@@ -58,6 +54,9 @@ func init() {
 		slog.Info("DEFAULT_COOKIES set, cookies.json will be ignored")
 	}
 
+	handler.Proxy = proxy
+	handler.DefaultCookies = defaultCookies
+
 	authToken = os.Getenv("AUTH_TOKEN")
 }
 
@@ -67,13 +66,13 @@ func main() {
 	r.Use(CORSMiddleware())
 	r.Use(AuthMiddleware(authToken))
 
-	r.GET("/", rootHandler)
+	r.GET("/", RootHandler)
 
-	r.POST("/image/upload", imageUploadHandler)
-	r.POST("/image/create", imageCreateHandler)
-	r.POST("/chat/stream", streamChatHandler)
-	r.POST("/v1/chat/completions", completeChatHandler)
-	r.POST("/v1/images/generations", generateImageHandler)
+	r.POST("/image/upload", handler.BingImageUploadHandler)
+	r.POST("/image/create", handler.BingImageCreateHandler)
+	r.POST("/chat/stream", handler.BingStreamChatHandler)
+	r.POST("/v1/chat/completions", handler.BingCompleteChatHandler)
+	r.POST("/v1/images/generations", handler.BingGenerateImageHandler)
 
 	r.Run(fmt.Sprintf(":%s", port))
 }
@@ -110,272 +109,272 @@ func AuthMiddleware(authToken string) gin.HandlerFunc {
 	}
 }
 
-func rootHandler(c *gin.Context) {
+func RootHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"message": "Everything is OK!",
 	})
 }
 
-func imageUploadHandler(c *gin.Context) {
-	var uploadReq ImageUploadRequest
-	if err := c.ShouldBind(&uploadReq); err != nil {
-		c.String(http.StatusBadRequest, "Bad request: %v", err)
-		return
-	}
+// func imageUploadHandler(c *gin.Context) {
+// 	var uploadReq ImageUploadRequest
+// 	if err := c.ShouldBind(&uploadReq); err != nil {
+// 		c.String(http.StatusBadRequest, "Bad request: %v", err)
+// 		return
+// 	}
 
-	cookies := util.Ternary(uploadReq.Cookies == "", defaultCookies, util.ParseCookies(uploadReq.Cookies))
+// 	cookies := util.Ternary(uploadReq.Cookies == "", defaultCookies, util.ParseCookies(uploadReq.Cookies))
 
-	file, err := uploadReq.File.Open()
-	if err != nil {
-		c.String(http.StatusInternalServerError, "Failed to open the file: %v", err)
-		return
-	}
-	defer file.Close()
+// 	file, err := uploadReq.File.Open()
+// 	if err != nil {
+// 		c.String(http.StatusInternalServerError, "Failed to open the file: %v", err)
+// 		return
+// 	}
+// 	defer file.Close()
 
-	bytes, err := io.ReadAll(file)
-	if err != nil {
-		c.String(http.StatusInternalServerError, "Failed to read the file: %v", err)
-		return
-	}
+// 	bytes, err := io.ReadAll(file)
+// 	if err != nil {
+// 		c.String(http.StatusInternalServerError, "Failed to read the file: %v", err)
+// 		return
+// 	}
 
-	// Upload image
-	imgUrl, err := sydney.NewSydney(sydney.Options{
-		Cookies: cookies,
-		Proxy:   proxy,
-	}).UploadImage(bytes)
+// 	// Upload image
+// 	imgUrl, err := sydney.NewSydney(sydney.Options{
+// 		Cookies: cookies,
+// 		Proxy:   proxy,
+// 	}).UploadImage(bytes)
 
-	if err != nil {
-		c.String(http.StatusInternalServerError, "Image upload failed: %v", err)
-		return
-	}
+// 	if err != nil {
+// 		c.String(http.StatusInternalServerError, "Image upload failed: %v", err)
+// 		return
+// 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"imgUrl": imgUrl,
-	})
-}
+// 	c.JSON(http.StatusOK, gin.H{
+// 		"imgUrl": imgUrl,
+// 	})
+// }
 
-func imageCreateHandler(c *gin.Context) {
-	var request sydney.CreateImageRequest
+// func imageCreateHandler(c *gin.Context) {
+// 	var request sydney.CreateImageRequest
 
-	if err := c.BindJSON(&request); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
+// 	if err := c.BindJSON(&request); err != nil {
+// 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+// 		return
+// 	}
 
-	cookies := util.Ternary(request.Cookies == "", defaultCookies, util.ParseCookies(request.Cookies))
+// 	cookies := util.Ternary(request.Cookies == "", defaultCookies, util.ParseCookies(request.Cookies))
 
-	// Create image
-	image, err := sydney.NewSydney(sydney.Options{
-		Cookies:           cookies,
-		Proxy:             proxy,
-		ConversationStyle: "Creative",
-	}).GenerateImage(request.Image)
+// 	// Create image
+// 	image, err := sydney.NewSydney(sydney.Options{
+// 		Cookies:           cookies,
+// 		Proxy:             proxy,
+// 		ConversationStyle: "Creative",
+// 	}).GenerateImage(request.Image)
 
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
+// 	if err != nil {
+// 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+// 		return
+// 	}
 
-	c.JSON(http.StatusOK, image)
-}
+// 	c.JSON(http.StatusOK, image)
+// }
 
-func streamChatHandler(c *gin.Context) {
-	var request sydney.ChatStreamRequest
+// func streamChatHandler(c *gin.Context) {
+// 	var request sydney.ChatStreamRequest
 
-	if err := c.BindJSON(&request); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
+// 	if err := c.BindJSON(&request); err != nil {
+// 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+// 		return
+// 	}
 
-	cookies := util.Ternary(request.Cookies == "", defaultCookies, util.ParseCookies(request.Cookies))
+// 	cookies := util.Ternary(request.Cookies == "", defaultCookies, util.ParseCookies(request.Cookies))
 
-	sydneyAPI := sydney.NewSydney(sydney.Options{
-		Cookies:           cookies,
-		Proxy:             proxy,
-		ConversationStyle: request.ConversationStyle,
-		NoSearch:          request.NoSearch,
-		GPT4Turbo:         request.UseGPT4Turbo,
-		UseClassic:        request.UseClassic,
-		Plugins:           request.Plugins,
-	})
+// 	sydneyAPI := sydney.NewSydney(sydney.Options{
+// 		Cookies:           cookies,
+// 		Proxy:             proxy,
+// 		ConversationStyle: request.ConversationStyle,
+// 		NoSearch:          request.NoSearch,
+// 		GPT4Turbo:         request.UseGPT4Turbo,
+// 		UseClassic:        request.UseClassic,
+// 		Plugins:           request.Plugins,
+// 	})
 
-	// Stream chat
-	messageCh, err := sydneyAPI.AskStream(sydney.AskStreamOptions{
-		StopCtx:        c.Request.Context(),
-		Prompt:         request.Prompt,
-		WebpageContext: request.WebpageContext,
-		ImageURL:       request.ImageURL,
-	})
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "error creating conversation: " + err.Error()})
-		return
-	}
+// 	// Stream chat
+// 	messageCh, err := sydneyAPI.AskStream(sydney.AskStreamOptions{
+// 		StopCtx:        c.Request.Context(),
+// 		Prompt:         request.Prompt,
+// 		WebpageContext: request.WebpageContext,
+// 		ImageURL:       request.ImageURL,
+// 	})
+// 	if err != nil {
+// 		c.JSON(http.StatusInternalServerError, gin.H{"error": "error creating conversation: " + err.Error()})
+// 		return
+// 	}
 
-	c.Stream(func(w io.Writer) bool {
-		for message := range messageCh {
-			encoded, _ := json.Marshal(message.Text)
-			fmt.Fprintf(w, "event: %s\ndata: %s\n\n", message.Type, encoded)
-			c.Writer.Flush()
-		}
-		return false
-	})
-}
+// 	c.Stream(func(w io.Writer) bool {
+// 		for message := range messageCh {
+// 			encoded, _ := json.Marshal(message.Text)
+// 			fmt.Fprintf(w, "event: %s\ndata: %s\n\n", message.Type, encoded)
+// 			c.Writer.Flush()
+// 		}
+// 		return false
+// 	})
+// }
 
-func completeChatHandler(c *gin.Context) {
-	var request sydney.OpenAIChatCompletionRequest
+// func completeChatHandler(c *gin.Context) {
+// 	var request sydney.OpenAIChatCompletionRequest
 
-	if err := c.BindJSON(&request); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
+// 	if err := c.BindJSON(&request); err != nil {
+// 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+// 		return
+// 	}
 
-	parsedMessages, err := sydney.ParseOpenAIMessages(request.Messages)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
+// 	parsedMessages, err := sydney.ParseOpenAIMessages(request.Messages)
+// 	if err != nil {
+// 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+// 		return
+// 	}
 
-	cookiesStr := c.GetHeader("Cookie")
-	cookies := util.Ternary(cookiesStr == "", defaultCookies, util.ParseCookies(cookiesStr))
+// 	cookiesStr := c.GetHeader("Cookie")
+// 	cookies := util.Ternary(cookiesStr == "", defaultCookies, util.ParseCookies(cookiesStr))
 
-	conversationStyle := util.Ternary(
-		strings.HasPrefix(request.Model, "gpt-3.5-turbo"), "Balanced", "Creative")
+// 	conversationStyle := util.Ternary(
+// 		strings.HasPrefix(request.Model, "gpt-3.5-turbo"), "Balanced", "Creative")
 
-	sydneyAPI := sydney.NewSydney(sydney.Options{
-		Cookies:           cookies,
-		Proxy:             proxy,
-		ConversationStyle: conversationStyle,
-		Locale:            "en-US",
-		NoSearch:          request.ToolChoice == nil,
-		GPT4Turbo:         true,
-	})
+// 	sydneyAPI := sydney.NewSydney(sydney.Options{
+// 		Cookies:           cookies,
+// 		Proxy:             proxy,
+// 		ConversationStyle: conversationStyle,
+// 		Locale:            "en-US",
+// 		NoSearch:          request.ToolChoice == nil,
+// 		GPT4Turbo:         true,
+// 	})
 
-	messageCh, err := sydneyAPI.AskStream(sydney.AskStreamOptions{
-		StopCtx:        c.Request.Context(),
-		Prompt:         parsedMessages.Prompt,
-		WebpageContext: parsedMessages.WebpageContext,
-		ImageURL:       parsedMessages.ImageURL,
-	})
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "error creating conversation: " + err.Error()})
-		return
-	}
+// 	messageCh, err := sydneyAPI.AskStream(sydney.AskStreamOptions{
+// 		StopCtx:        c.Request.Context(),
+// 		Prompt:         parsedMessages.Prompt,
+// 		WebpageContext: parsedMessages.WebpageContext,
+// 		ImageURL:       parsedMessages.ImageURL,
+// 	})
+// 	if err != nil {
+// 		c.JSON(http.StatusInternalServerError, gin.H{"error": "error creating conversation: " + err.Error()})
+// 		return
+// 	}
 
-	if !request.Stream {
-		var replyBuilder strings.Builder
-		errored := false
+// 	if !request.Stream {
+// 		var replyBuilder strings.Builder
+// 		errored := false
 
-		for message := range messageCh {
-			switch message.Type {
-			case sydney.MessageTypeMessageText:
-				replyBuilder.WriteString(message.Text)
-			case sydney.MessageTypeError:
-				errored = true
-				replyBuilder.WriteString("`Error: ")
-				replyBuilder.WriteString(message.Text)
-				replyBuilder.WriteString("`")
-			}
-		}
+// 		for message := range messageCh {
+// 			switch message.Type {
+// 			case sydney.MessageTypeMessageText:
+// 				replyBuilder.WriteString(message.Text)
+// 			case sydney.MessageTypeError:
+// 				errored = true
+// 				replyBuilder.WriteString("`Error: ")
+// 				replyBuilder.WriteString(message.Text)
+// 				replyBuilder.WriteString("`")
+// 			}
+// 		}
 
-		c.JSON(http.StatusOK, sydney.NewOpenAIChatCompletion(
-			conversationStyle,
-			replyBuilder.String(),
-			util.Ternary(errored, sydney.FinishReasonLength, sydney.FinishReasonStop),
-		))
+// 		c.JSON(http.StatusOK, sydney.NewOpenAIChatCompletion(
+// 			conversationStyle,
+// 			replyBuilder.String(),
+// 			util.Ternary(errored, sydney.FinishReasonLength, sydney.FinishReasonStop),
+// 		))
 
-		return
-	}
+// 		return
+// 	}
 
-	c.Stream(func(w io.Writer) bool {
-		errored := false
+// 	c.Stream(func(w io.Writer) bool {
+// 		errored := false
 
-		for message := range messageCh {
-			var delta string
+// 		for message := range messageCh {
+// 			var delta string
 
-			switch message.Type {
-			case sydney.MessageTypeMessageText:
-				delta = message.Text
-			case sydney.MessageTypeError:
-				errored = true
-				delta = fmt.Sprintf("`Error: %s`", message.Text)
-			default:
-				continue
-			}
+// 			switch message.Type {
+// 			case sydney.MessageTypeMessageText:
+// 				delta = message.Text
+// 			case sydney.MessageTypeError:
+// 				errored = true
+// 				delta = fmt.Sprintf("`Error: %s`", message.Text)
+// 			default:
+// 				continue
+// 			}
 
-			chunk := sydney.NewOpenAIChatCompletionChunk(conversationStyle, delta, nil)
-			encoded, err := json.Marshal(chunk)
-			if err != nil {
-				continue
-			}
+// 			chunk := sydney.NewOpenAIChatCompletionChunk(conversationStyle, delta, nil)
+// 			encoded, err := json.Marshal(chunk)
+// 			if err != nil {
+// 				continue
+// 			}
 
-			fmt.Fprintf(w, "data: %s\n\n", encoded)
-			c.Writer.Flush()
-		}
+// 			fmt.Fprintf(w, "data: %s\n\n", encoded)
+// 			c.Writer.Flush()
+// 		}
 
-		chunk := sydney.NewOpenAIChatCompletionChunk(conversationStyle, "", util.Ternary(errored, &sydney.FinishReasonLength, &sydney.FinishReasonStop))
-		encoded, _ := json.Marshal(chunk)
-		fmt.Fprintf(w, "data: %s\n\ndata: [DONE]\n", encoded)
-		c.Writer.Flush()
+// 		chunk := sydney.NewOpenAIChatCompletionChunk(conversationStyle, "", util.Ternary(errored, &sydney.FinishReasonLength, &sydney.FinishReasonStop))
+// 		encoded, _ := json.Marshal(chunk)
+// 		fmt.Fprintf(w, "data: %s\n\ndata: [DONE]\n", encoded)
+// 		c.Writer.Flush()
 
-		return false
-	})
-}
+// 		return false
+// 	})
+// }
 
-func generateImageHandler(c *gin.Context) {
-	var request sydney.OpenAIImageGenerationRequest
+// func generateImageHandler(c *gin.Context) {
+// 	var request sydney.OpenAIImageGenerationRequest
 
-	// Bind JSON request body to struct
-	if err := c.BindJSON(&request); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
+// 	// Bind JSON request body to struct
+// 	if err := c.BindJSON(&request); err != nil {
+// 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+// 		return
+// 	}
 
-	cookiesStr := c.GetHeader("Cookie")
-	cookies := util.Ternary(cookiesStr == "", defaultCookies, util.ParseCookies(cookiesStr))
+// 	cookiesStr := c.GetHeader("Cookie")
+// 	cookies := util.Ternary(cookiesStr == "", defaultCookies, util.ParseCookies(cookiesStr))
 
-	sydneyAPI := sydney.NewSydney(sydney.Options{
-		Cookies:           cookies,
-		Proxy:             proxy,
-		ConversationStyle: "Creative",
-		Locale:            "en-US",
-	})
+// 	sydneyAPI := sydney.NewSydney(sydney.Options{
+// 		Cookies:           cookies,
+// 		Proxy:             proxy,
+// 		ConversationStyle: "Creative",
+// 		Locale:            "en-US",
+// 	})
 
-	// Ask stream with a new context
-	newContext, cancel := context.WithCancel(c.Request.Context())
-	defer cancel()
+// 	// Ask stream with a new context
+// 	newContext, cancel := context.WithCancel(c.Request.Context())
+// 	defer cancel()
 
-	messageCh, err := sydneyAPI.AskStream(sydney.AskStreamOptions{
-		StopCtx:        newContext,
-		Prompt:         "Create image for the description: " + request.Prompt,
-		WebpageContext: sydney.ImageGeneratorContext, // Assuming ImageGeneratorContext is predefined
-	})
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
+// 	messageCh, err := sydneyAPI.AskStream(sydney.AskStreamOptions{
+// 		StopCtx:        newContext,
+// 		Prompt:         "Create image for the description: " + request.Prompt,
+// 		WebpageContext: sydney.ImageGeneratorContext, // Assuming ImageGeneratorContext is predefined
+// 	})
+// 	if err != nil {
+// 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+// 		return
+// 	}
 
-	var generativeImage sydney.GenerativeImage
+// 	var generativeImage sydney.GenerativeImage
 
-	for message := range messageCh {
-		if message.Type == sydney.MessageTypeGenerativeImage {
-			err := json.Unmarshal([]byte(message.Text), &generativeImage)
-			if err == nil {
-				break
-			}
-		}
-	}
-	cancel()
+// 	for message := range messageCh {
+// 		if message.Type == sydney.MessageTypeGenerativeImage {
+// 			err := json.Unmarshal([]byte(message.Text), &generativeImage)
+// 			if err == nil {
+// 				break
+// 			}
+// 		}
+// 	}
+// 	cancel()
 
-	if generativeImage.URL == "" {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "empty generative image"})
-		return
-	}
+// 	if generativeImage.URL == "" {
+// 		c.JSON(http.StatusInternalServerError, gin.H{"error": "empty generative image"})
+// 		return
+// 	}
 
-	image, err := sydneyAPI.GenerateImage(generativeImage)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
+// 	image, err := sydneyAPI.GenerateImage(generativeImage)
+// 	if err != nil {
+// 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+// 		return
+// 	}
 
-	c.JSON(http.StatusOK, sydney.ToOpenAIImageGeneration(image))
-}
+// 	c.JSON(http.StatusOK, sydney.ToOpenAIImageGeneration(image))
+// }
