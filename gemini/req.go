@@ -21,6 +21,23 @@ type Message struct {
 	Error error
 }
 
+func Ask(options AskStreamOptions) (string, error) {
+	ctx := context.Background()
+
+	client, err := genai.NewClient(ctx, option.WithAPIKey(options.APIKey))
+	if err != nil {
+		return "", err
+	}
+	defer client.Close()
+
+	model := client.GenerativeModel(options.Model)
+	resp, err := model.GenerateContent(ctx, genai.Text(options.Prompt))
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprint(resp.Candidates[0].Content.Parts[0]), err
+}
+
 func AskStream(options AskStreamOptions) (<-chan Message, error) {
 	ctx := context.Background()
 

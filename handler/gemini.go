@@ -80,44 +80,35 @@ func GeminiCompleteChatHandler(c *gin.Context) {
 		return
 	}
 
-	model := util.Ternary(request.Model == "", "gemini-pro", request.Model)
+	model := util.Ternary(request.Model == "", "gemini", request.Model)
 	apiKey := util.Ternary(request.APIKey == "", DefaultAPIKey, request.APIKey)
 
 	// 将 OpenAI 格式的消息转换成 Kimi 格式的消息
 	text := geminiMessagesPrepare(request.Messages)
-
-	messageCh, err := gemini.AskStream(gemini.AskStreamOptions{
+	options := gemini.AskStreamOptions{
 		APIKey: apiKey,
 		Model:  model,
 		Prompt: text,
-	})
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "error creating conversation: " + err.Error()})
-		return
 	}
 
 	if !request.Stream {
-		var replyBuilder strings.Builder
+		reply, err := gemini.Ask(options)
 		errored := false
-
-		for message := range messageCh {
-			// TODO
-			switch message.Event {
-			case "message":
-				replyBuilder.WriteString(message.Text)
-			case "error":
-				errored = true
-				replyBuilder.WriteString("`Error: ")
-				replyBuilder.WriteString(message.Text)
-				replyBuilder.WriteString("`")
-			}
+		if err != nil {
+			reply = err.Error()
+			errored = true
 		}
 		c.JSON(http.StatusOK, sydney.NewOpenAIChatCompletion(
 			strings.ToUpper(model),
-			replyBuilder.String(),
+			reply,
 			util.Ternary(errored, sydney.FinishReasonLength, sydney.FinishReasonStop),
 		))
+		return
+	}
 
+	messageCh, err := gemini.AskStream(options)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "error creating conversation: " + err.Error()})
 		return
 	}
 
