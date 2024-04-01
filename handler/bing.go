@@ -142,7 +142,7 @@ func BingCompleteChatHandler(c *gin.Context) {
 	cookies := util.Ternary(cookiesStr == "", DefaultCookies, util.ParseCookies(cookiesStr))
 
 	conversationStyle := util.Ternary(
-		strings.HasPrefix(request.Model, "gpt-3.5-turbo"), "Balanced", "Creative")
+		strings.HasPrefix(request.Model, "gpt-3.5-turbo"), "Balanced", request.Model)
 
 	sydneyAPI := sydney.NewSydney(sydney.Options{
 		Cookies:           cookies,

@@ -88,12 +88,14 @@ func main() {
 
 	r.GET("/", RootHandler)
 
+	// COMMON
+	r.POST("/v1/chat/completions", handler.ModelBasedDispatcher())
+
 	// BING AI
 	r.POST("/image/upload", handler.BingImageUploadHandler)
 	r.POST("/image/create", handler.BingImageCreateHandler)
 	r.POST("/chat/stream", handler.BingStreamChatHandler)
-	// TODO 合并路由，通过模型区分
-	r.POST("/v1/chat/completions", handler.BingCompleteChatHandler)
+	r.POST("/v1/bing/chat/completions", handler.BingCompleteChatHandler)
 	r.POST("/v1/images/generations", handler.BingGenerateImageHandler)
 
 	// KIMI AI
