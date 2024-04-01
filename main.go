@@ -26,6 +26,13 @@ var (
 )
 
 func init() {
+	// load envs
+	err := util.LoadEnv(".env")
+	if err != nil {
+		fmt.Println("Failed to load .env file:", err)
+		return
+	}
+
 	// read envs
 	port = os.Getenv("PORT")
 	if port == "" {
@@ -60,9 +67,15 @@ func init() {
 		panic("在这里提供你默认的 refreshToken")
 	}
 
+	geminiAPIKey := os.Getenv("GEMINI_API_KEY")
+	if geminiAPIKey == "" {
+		panic("在这里提供你默认的 Gemini API Key")
+	}
+
 	handler.Proxy = proxy
 	handler.DefaultCookies = defaultCookies
 	handler.DefaultRefreshToken = refreshToken
+	handler.DefaultAPIKey = geminiAPIKey
 
 	authToken = os.Getenv("AUTH_TOKEN")
 }
@@ -86,6 +99,10 @@ func main() {
 	// KIMI AI
 	r.POST("/kimi/chat/stream", handler.KimiStreamChatHandler)
 	r.POST("/v1/kimi/chat/completions", handler.KimiCompleteChatHandler)
+
+	// GEMINI AI
+	r.POST("/gemini/chat/stream", handler.GeminiStreamChatHandler)
+	r.POST("/v1/gemini/chat/completions", handler.GeminiCompleteChatHandler)
 
 	r.Run(fmt.Sprintf(":%s", port))
 }
