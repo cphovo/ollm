@@ -62,7 +62,7 @@ require (
 	github.com/onsi/gomega v1.31.1 // indirect
 	github.com/pelletier/go-toml/v2 v2.0.8 // indirect
 	github.com/quic-go/qpack v0.4.0 // indirect
-	github.com/quic-go/quic-go v0.41.0 // indirect
+	github.com/quic-go/quic-go v0.42.0 // indirect
 	github.com/randall77/makefat v0.0.0-20210315173500-7ddd0e42c844 // indirect
 	github.com/refraction-networking/utls v1.6.3 // indirect
 	github.com/tidwall/match v1.1.1 // indirect
